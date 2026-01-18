@@ -1,0 +1,27 @@
+version: 2
+project_name: astral-update
+
+builds:
+  - main: ./cmd/astral-update
+    binary: astral-update
+    env: [CGO_ENABLED=0]
+    goos: [linux]
+    goarch: [amd64, arm64]
+
+archives:
+  - formats: [tar.gz]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+nfpms:
+  - package_name: astral-update
+    maintainer: Jay
+    description: Update and install Astral tools (uv, ruff, ty, etc.)
+    homepage: https://github.com/jay/astral-tools-update
+    formats: [deb, rpm]
+    bindir: /usr/bin
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  disable: true
