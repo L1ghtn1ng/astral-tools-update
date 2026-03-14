@@ -3,6 +3,7 @@ package updater
 import (
 	"errors"
 	"log"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -59,7 +60,7 @@ func (environment fakeEnv) FileExists(path string) bool {
 }
 
 func TestUpdate_UsesUvFromPATH(test *testing.T) {
-	runner := &fakeRunner{lookPath: map[string]string{"uv": "/usr/bin/uv"}}
+	runner := &fakeRunner{lookPath: map[string]string{"uv": "/usr/bin/uv", "ruff": "/usr/bin/ruff"}}
 	environment := fakeEnv{home: "/home/x", exists: map[string]bool{}}
 	var logs strings.Builder
 
@@ -71,8 +72,8 @@ func TestUpdate_UsesUvFromPATH(test *testing.T) {
 	if got := strings.Join(runner.calls, "\n"); !strings.Contains(got, "/usr/bin/uv self update") {
 		test.Fatalf("expected self update call, got calls:\n%s", got)
 	}
-	if got := strings.Join(runner.calls, "\n"); !strings.Contains(got, "/usr/bin/uv tool install ruff@latest") {
-		test.Fatalf("expected tool install call, got calls:\n%s", got)
+	if got := strings.Join(runner.calls, "\n"); !strings.Contains(got, "/usr/bin/uv tool upgrade ruff") {
+		test.Fatalf("expected tool upgrade call, got calls:\n%s", got)
 	}
 }
 
@@ -88,6 +89,27 @@ func TestUpdate_SkipsSelfUpdate(test *testing.T) {
 	got := strings.Join(runner.calls, "\n")
 	if strings.Contains(got, "self update") {
 		test.Fatalf("expected no self update call, got calls:\n%s", got)
+	}
+	if !strings.Contains(got, "/usr/bin/uv tool install ty@latest") {
+		test.Fatalf("expected tool install call, got calls:\n%s", got)
+	}
+}
+
+func TestUpdate_UsesFallbackToolPathForUpgrade(test *testing.T) {
+	runner := &fakeRunner{lookPath: map[string]string{"uv": "/usr/bin/uv"}}
+	environment := fakeEnv{
+		home:   "/home/x",
+		exists: map[string]bool{"/home/x/.local/bin/ty": true},
+	}
+
+	toolUpdater := &Updater{Runner: runner, Env: environment, Log: log.New(&strings.Builder{}, "", 0)}
+	if err := toolUpdater.Update([]string{"ty"}, true); err != nil {
+		test.Fatalf("expected nil error, got %v", err)
+	}
+
+	got := strings.Join(runner.calls, "\n")
+	if !strings.Contains(got, "/usr/bin/uv tool upgrade ty") {
+		test.Fatalf("expected tool upgrade call, got calls:\n%s", got)
 	}
 }
 
@@ -158,5 +180,20 @@ func TestEnsureUVInstalled_ReturnsErrorWhenEnvNil(test *testing.T) {
 	toolUpdater := &Updater{Runner: runner, Env: nil, Log: nil}
 	if _, err := toolUpdater.ensureUVInstalled(); err == nil {
 		test.Fatalf("expected error")
+	}
+}
+
+func TestRealRunner_RunShell_IncludesExitCode(test *testing.T) {
+	if runtime.GOOS == "windows" {
+		test.Skip("shell exit code behavior differs on Windows")
+	}
+
+	runner := realRunner{}
+	err := runner.RunShell("exit 7")
+	if err == nil {
+		test.Fatalf("expected error")
+	}
+	if !strings.Contains(err.Error(), "exit code 7") {
+		test.Fatalf("expected wrapped error with exit code, got: %v", err)
 	}
 }

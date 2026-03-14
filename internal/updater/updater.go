@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strings"
 )
 
 const uvInstallCommand = "curl -LsSf https://astral.sh/uv/install.sh | sh"
@@ -79,7 +80,15 @@ func (updater *Updater) Update(tools []string, noSelfUpdate bool) error {
 	}
 
 	for _, tool := range tools {
-		updater.logger().Printf("INFO: Installing/updating %s...", tool)
+		if toolPath, ok := updater.getToolPath(tool); ok {
+			updater.logger().Printf("INFO: %s found at %s, upgrading...", tool, toolPath)
+			if err := updater.Runner.Run(uvPath, "tool", "upgrade", tool); err != nil {
+				return fmt.Errorf("uv tool upgrade %s failed: %w", tool, err)
+			}
+			continue
+		}
+
+		updater.logger().Printf("INFO: %s not found, installing...", tool)
 		if err := updater.Runner.Run(uvPath, "tool", "install", tool+"@latest"); err != nil {
 			return fmt.Errorf("uv tool install %s@latest failed: %w", tool, err)
 		}
@@ -94,7 +103,7 @@ func (updater *Updater) ensureUVInstalled() (string, error) {
 		return "", err
 	}
 
-	if uvPath, ok := updater.getUVPath(); ok {
+	if uvPath, ok := updater.getToolPath("uv"); ok {
 		updater.logger().Printf("INFO: uv found at %s", uvPath)
 		return uvPath, nil
 	}
@@ -107,7 +116,7 @@ func (updater *Updater) ensureUVInstalled() (string, error) {
 		return "", fmt.Errorf("failed to install uv: %w", err)
 	}
 
-	if uvPath, ok := updater.getUVPath(); ok {
+	if uvPath, ok := updater.getToolPath("uv"); ok {
 		return uvPath, nil
 	}
 
@@ -122,21 +131,21 @@ func (updater *Updater) ensureUVInstalled() (string, error) {
 	return fallback, nil
 }
 
-func (updater *Updater) getUVPath() (string, bool) {
+func (updater *Updater) getToolPath(tool string) (string, bool) {
 	if updater == nil || updater.Runner == nil || updater.Env == nil {
 		return "", false
 	}
 
-	uvInPath, err := updater.Runner.LookPath("uv")
-	if err == nil && uvInPath != "" {
-		return uvInPath, true
+	toolInPath, err := updater.Runner.LookPath(tool)
+	if err == nil && toolInPath != "" {
+		return toolInPath, true
 	}
 
 	home, err := updater.Env.HomeDir()
 	if err != nil {
 		return "", false
 	}
-	defaultPath := filepath.Join(home, ".local", "bin", "uv")
+	defaultPath := filepath.Join(home, ".local", "bin", tool)
 	if updater.Env.FileExists(defaultPath) {
 		return defaultPath, true
 	}
@@ -151,14 +160,30 @@ func (realRunner) Run(name string, args ...string) error {
 	cmd := exec.Command(name, args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	if err := cmd.Run(); err != nil {
+		return wrapCommandError(name, args, err)
+	}
+	return nil
 }
 
 func (realRunner) RunShell(command string) error {
-	cmd := exec.Command("sh", "-c", command)
+	name, args := "sh", []string{"-c", command}
+	cmd := exec.Command(name, args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	if err := cmd.Run(); err != nil {
+		return wrapCommandError(name, args, err)
+	}
+	return nil
+}
+
+func wrapCommandError(name string, args []string, err error) error {
+	argv := append([]string{name}, args...)
+	command := strings.Join(argv, " ")
+	if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
+		return fmt.Errorf("command %q failed with exit code %d: %w", command, exitErr.ExitCode(), err)
+	}
+	return fmt.Errorf("command %q failed: %w", command, err)
 }
 
 type realEnv struct{}
@@ -177,5 +202,5 @@ func NewReal(logger *log.Logger) *Updater {
 	if logger == nil {
 		logger = log.New(os.Stderr, "", 0)
 	}
-	return &Updater{Runner: realRunner{}, Env: realEnv{}, Log: logger}
+	return new(Updater{Runner: realRunner{}, Env: realEnv{}, Log: logger})
 }
