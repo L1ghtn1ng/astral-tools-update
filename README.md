@@ -1,4 +1,5 @@
 # astral-tools-update
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/L1ghtn1ng/astral-tools-update)
 
 `astral-tools-update` is a small Go CLI for keeping Astral tools up to date through `uv`.
 It will:
