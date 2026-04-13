@@ -18,6 +18,7 @@ var toolNameRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
 
 type Runner interface {
 	LookPath(file string) (string, error)
+	Output(name string, args ...string) (string, error)
 	Run(name string, args ...string) error
 	RunShell(command string) error
 }
@@ -78,9 +79,10 @@ func (updater *Updater) Update(tools []string, noSelfUpdate bool) error {
 			return fmt.Errorf("uv self update failed: %w", err)
 		}
 	}
+	uvToolBinDir := updater.getUVToolBinDir(uvPath)
 
 	for _, tool := range tools {
-		if toolPath, ok := updater.getToolPath(tool); ok {
+		if toolPath, ok := updater.getToolPath(tool, uvToolBinDir); ok {
 			updater.logger().Printf("INFO: %s found at %s, upgrading...", tool, toolPath)
 			if err := updater.Runner.Run(uvPath, "tool", "upgrade", tool); err != nil {
 				return fmt.Errorf("uv tool upgrade %s failed: %w", tool, err)
@@ -103,7 +105,7 @@ func (updater *Updater) ensureUVInstalled() (string, error) {
 		return "", err
 	}
 
-	if uvPath, ok := updater.getToolPath("uv"); ok {
+	if uvPath, ok := updater.getToolPath("uv", ""); ok {
 		updater.logger().Printf("INFO: uv found at %s", uvPath)
 		return uvPath, nil
 	}
@@ -116,7 +118,7 @@ func (updater *Updater) ensureUVInstalled() (string, error) {
 		return "", fmt.Errorf("failed to install uv: %w", err)
 	}
 
-	if uvPath, ok := updater.getToolPath("uv"); ok {
+	if uvPath, ok := updater.getToolPath("uv", ""); ok {
 		return uvPath, nil
 	}
 
@@ -131,7 +133,7 @@ func (updater *Updater) ensureUVInstalled() (string, error) {
 	return fallback, nil
 }
 
-func (updater *Updater) getToolPath(tool string) (string, bool) {
+func (updater *Updater) getToolPath(tool string, uvToolBinDir string) (string, bool) {
 	if updater == nil || updater.Runner == nil || updater.Env == nil {
 		return "", false
 	}
@@ -139,6 +141,13 @@ func (updater *Updater) getToolPath(tool string) (string, bool) {
 	toolInPath, err := updater.Runner.LookPath(tool)
 	if err == nil && toolInPath != "" {
 		return toolInPath, true
+	}
+
+	if uvToolBinDir != "" {
+		uvManagedPath := filepath.Join(uvToolBinDir, tool)
+		if updater.Env.FileExists(uvManagedPath) {
+			return uvManagedPath, true
+		}
 	}
 
 	home, err := updater.Env.HomeDir()
@@ -152,9 +161,30 @@ func (updater *Updater) getToolPath(tool string) (string, bool) {
 	return "", false
 }
 
+func (updater *Updater) getUVToolBinDir(uvPath string) string {
+	if updater == nil || updater.Runner == nil || uvPath == "" {
+		return ""
+	}
+
+	output, err := updater.Runner.Output(uvPath, "tool", "dir", "--bin")
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(output)
+}
+
 type realRunner struct{}
 
 func (realRunner) LookPath(file string) (string, error) { return exec.LookPath(file) }
+
+func (realRunner) Output(name string, args ...string) (string, error) {
+	cmd := exec.Command(name, args...)
+	output, err := cmd.Output()
+	if err != nil {
+		return "", wrapCommandError(name, args, err)
+	}
+	return string(output), nil
+}
 
 func (realRunner) Run(name string, args ...string) error {
 	cmd := exec.Command(name, args...)

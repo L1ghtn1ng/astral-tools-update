@@ -9,7 +9,7 @@ import (
 	"astral-tools-update/internal/updater"
 )
 
-const version = "1.0.0"
+const version = "1.0.1"
 
 func main() {
 	logger := log.New(os.Stderr, "", 0)

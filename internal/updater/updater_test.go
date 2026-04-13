@@ -10,6 +10,7 @@ import (
 
 type fakeRunner struct {
 	lookPath map[string]string
+	output   map[string]string
 	runErr   map[string]error
 	calls    []string
 }
@@ -17,6 +18,18 @@ type fakeRunner struct {
 func (runner *fakeRunner) LookPath(file string) (string, error) {
 	if path, ok := runner.lookPath[file]; ok {
 		return path, nil
+	}
+	return "", errors.New("not found")
+}
+
+func (runner *fakeRunner) Output(name string, args ...string) (string, error) {
+	key := name + " " + strings.Join(args, " ")
+	runner.calls = append(runner.calls, key)
+	if err, ok := runner.runErr[key]; ok {
+		return "", err
+	}
+	if output, ok := runner.output[key]; ok {
+		return output, nil
 	}
 	return "", errors.New("not found")
 }
@@ -108,6 +121,91 @@ func TestUpdate_UsesFallbackToolPathForUpgrade(test *testing.T) {
 	}
 
 	got := strings.Join(runner.calls, "\n")
+	if !strings.Contains(got, "/usr/bin/uv tool upgrade ty") {
+		test.Fatalf("expected tool upgrade call, got calls:\n%s", got)
+	}
+}
+
+func TestUpdate_UsesUvToolBinDirForUpgrade(test *testing.T) {
+	runner := &fakeRunner{
+		lookPath: map[string]string{"uv": "/usr/bin/uv"},
+		output:   map[string]string{"/usr/bin/uv tool dir --bin": "/opt/uv-bin\n"},
+	}
+	environment := fakeEnv{
+		home:   "/home/x",
+		exists: map[string]bool{"/opt/uv-bin/ty": true},
+	}
+
+	toolUpdater := &Updater{Runner: runner, Env: environment, Log: log.New(&strings.Builder{}, "", 0)}
+	if err := toolUpdater.Update([]string{"ty"}, true); err != nil {
+		test.Fatalf("expected nil error, got %v", err)
+	}
+
+	got := strings.Join(runner.calls, "\n")
+	if !strings.Contains(got, "/usr/bin/uv tool dir --bin") {
+		test.Fatalf("expected uv tool dir lookup, got calls:\n%s", got)
+	}
+	if !strings.Contains(got, "/usr/bin/uv tool upgrade ty") {
+		test.Fatalf("expected tool upgrade call, got calls:\n%s", got)
+	}
+	if strings.Contains(got, "/usr/bin/uv tool install ty@latest") {
+		test.Fatalf("expected no install call, got calls:\n%s", got)
+	}
+}
+
+func TestUpdate_RefreshesUvToolBinDirAfterSelfUpdate(test *testing.T) {
+	runner := &fakeRunner{
+		lookPath: map[string]string{"uv": "/usr/bin/uv"},
+		output:   map[string]string{"/usr/bin/uv tool dir --bin": "/opt/uv-bin\n"},
+	}
+	environment := fakeEnv{
+		home:   "/home/x",
+		exists: map[string]bool{"/opt/uv-bin/ty": true},
+	}
+
+	toolUpdater := &Updater{Runner: runner, Env: environment, Log: log.New(&strings.Builder{}, "", 0)}
+	if err := toolUpdater.Update([]string{"ty"}, false); err != nil {
+		test.Fatalf("expected nil error, got %v", err)
+	}
+
+	selfUpdateCall := "/usr/bin/uv self update"
+	toolDirCall := "/usr/bin/uv tool dir --bin"
+	got := strings.Join(runner.calls, "\n")
+	selfUpdateIndex := strings.Index(got, selfUpdateCall)
+	toolDirIndex := strings.Index(got, toolDirCall)
+	if selfUpdateIndex == -1 {
+		test.Fatalf("expected self update call, got calls:\n%s", got)
+	}
+	if toolDirIndex == -1 {
+		test.Fatalf("expected uv tool dir lookup, got calls:\n%s", got)
+	}
+	if selfUpdateIndex > toolDirIndex {
+		test.Fatalf("expected self update before uv tool dir lookup, got calls:\n%s", got)
+	}
+	if !strings.Contains(got, "/usr/bin/uv tool upgrade ty") {
+		test.Fatalf("expected tool upgrade call, got calls:\n%s", got)
+	}
+}
+
+func TestUpdate_UsesLegacyFallbackWhenUvToolBinDirFails(test *testing.T) {
+	runner := &fakeRunner{
+		lookPath: map[string]string{"uv": "/usr/bin/uv"},
+		runErr:   map[string]error{"/usr/bin/uv tool dir --bin": errors.New("boom")},
+	}
+	environment := fakeEnv{
+		home:   "/home/x",
+		exists: map[string]bool{"/home/x/.local/bin/ty": true},
+	}
+
+	toolUpdater := &Updater{Runner: runner, Env: environment, Log: log.New(&strings.Builder{}, "", 0)}
+	if err := toolUpdater.Update([]string{"ty"}, true); err != nil {
+		test.Fatalf("expected nil error, got %v", err)
+	}
+
+	got := strings.Join(runner.calls, "\n")
+	if !strings.Contains(got, "/usr/bin/uv tool dir --bin") {
+		test.Fatalf("expected uv tool dir lookup, got calls:\n%s", got)
+	}
 	if !strings.Contains(got, "/usr/bin/uv tool upgrade ty") {
 		test.Fatalf("expected tool upgrade call, got calls:\n%s", got)
 	}

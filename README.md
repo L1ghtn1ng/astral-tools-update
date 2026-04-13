@@ -20,7 +20,8 @@ Current behavior:
 - accepts a list of Astral-managed tools such as `ruff` and `ty`,
 - defaults to `ruff ty` when no tool names are provided,
 - looks for `uv` on `PATH` first,
-- falls back to `~/.local/bin/<tool>` when checking for installed tools,
+- checks `uv`'s configured tool bin directory when checking for installed tools,
+- falls back to `~/.local/bin/<tool>` if that lookup is unavailable,
 - attempts to install `uv` automatically if it is missing, and
 - rejects invalid tool names before running commands.
 
@@ -121,7 +122,7 @@ The release pipeline currently targets:
 ## Helpful notes
 
 - Automatic `uv` installation uses: `curl -LsSf https://astral.sh/uv/install.sh | sh`
-- Installed tools may be detected either from `PATH` or from `~/.local/bin`
+- Installed tools may be detected from `PATH`, from `uv tool dir --bin`, or from `~/.local/bin`
 - The repository ignores generated build output such as `bin/` and `dist/`
 - CI uses `make build` and `make ci`, so keeping those targets green is a good local check before pushing changes
 
