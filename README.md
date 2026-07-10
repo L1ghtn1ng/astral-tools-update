@@ -63,7 +63,7 @@ astral-update --version
 What happens during a run:
 
 1. Unless `--no-github-self-update` is set, the program checks GitHub for a newer stable `astral-update` release.
-2. If a newer release exists, it selects the release asset matching the detected Linux CPU architecture and package format, then installs it.
+2. If a newer release exists, it selects the release asset matching the Linux CPU architecture and how the running executable was installed, then installs it.
 3. The program validates the tool names.
 4. It locates `uv` or installs it with Astral's install script.
 5. Unless `--no-self-update` is set, it runs `uv self update`.
@@ -129,7 +129,7 @@ The release pipeline currently targets:
 - archive output as `.tar.gz`
 - package output as `.deb` and `.rpm`
 
-During self-update on Linux, `.deb` is preferred for Debian/Ubuntu-like systems and `.rpm` is preferred for Fedora/RHEL/SUSE-like systems. If no native package format can be detected or matched, the updater falls back to the matching `.tar.gz` archive and replaces the current executable.
+During self-update on Linux, an executable running from the native package path (`/usr/bin/astral-update`) prefers `.deb` on Debian/Ubuntu-like systems and `.rpm` on Fedora/RHEL/SUSE-like systems. Executables running from any other path use the matching `.tar.gz` archive so the currently running installation is replaced directly. The updater also falls back to the archive when no native package format can be detected or matched.
 
 ## Helpful notes
 

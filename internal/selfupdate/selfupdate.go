@@ -21,10 +21,11 @@ import (
 )
 
 const (
-	defaultOwner         = "L1ghtn1ng"
-	defaultRepo          = "astral-tools-update"
-	defaultOSReleasePath = "/etc/os-release"
-	binaryName           = "astral-update"
+	defaultOwner          = "L1ghtn1ng"
+	defaultRepo           = "astral-tools-update"
+	defaultOSReleasePath  = "/etc/os-release"
+	binaryName            = "astral-update"
+	packageExecutablePath = "/usr/bin/" + binaryName
 )
 
 type HTTPClient interface {
@@ -271,6 +272,9 @@ func (updater *Updater) selectAsset(assets []githubAsset) (githubAsset, error) {
 func (updater *Updater) preferredFormats() []string {
 	if updater.GOOS != "linux" {
 		return []string{}
+	}
+	if filepath.Clean(updater.ExecutablePath) != packageExecutablePath {
+		return []string{"tar.gz"}
 	}
 	native := updater.detectLinuxPackageFormat()
 	if native == "" {

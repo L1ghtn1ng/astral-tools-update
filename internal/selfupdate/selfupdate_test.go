@@ -122,6 +122,7 @@ func TestSelectAsset_LinuxAMD64PrefersDebOnDebian(t *testing.T) {
 	updater := testUpdater(t, nil, nil, "1.0.1")
 	updater.GOOS = "linux"
 	updater.GOARCH = "amd64"
+	updater.ExecutablePath = packageExecutablePath
 	updater.OSReleasePath = writeFile(t, updater.TempDir, "os-release", "ID=ubuntu\nID_LIKE=debian\n")
 
 	asset, err := updater.selectAsset([]githubAsset{
@@ -141,6 +142,7 @@ func TestSelectAsset_LinuxArm64PrefersRpmOnRHEL(t *testing.T) {
 	updater := testUpdater(t, nil, nil, "1.0.1")
 	updater.GOOS = "linux"
 	updater.GOARCH = "arm64"
+	updater.ExecutablePath = packageExecutablePath
 	updater.OSReleasePath = writeFile(t, updater.TempDir, "os-release", "ID=rocky\nID_LIKE=\"rhel fedora\"\n")
 
 	asset, err := updater.selectAsset([]githubAsset{
@@ -160,6 +162,7 @@ func TestSelectAsset_FallsBackToTarWhenNativePackageMissing(t *testing.T) {
 	updater := testUpdater(t, nil, nil, "1.0.1")
 	updater.GOOS = "linux"
 	updater.GOARCH = "amd64"
+	updater.ExecutablePath = packageExecutablePath
 	updater.OSReleasePath = writeFile(t, updater.TempDir, "os-release", "ID=debian\n")
 
 	asset, err := updater.selectAsset([]githubAsset{
@@ -234,6 +237,7 @@ func TestCheckAndInstall_InstallFailureReportsInstallStarted(t *testing.T) {
 		"https://example.test/astral.deb": {body: "package"},
 	}}
 	updater := testUpdater(t, client, runner, "1.0.1")
+	updater.ExecutablePath = packageExecutablePath
 	updater.OSReleasePath = writeFile(t, updater.TempDir, "os-release", "ID=debian\n")
 	updater.EUID = 1000
 
@@ -259,6 +263,7 @@ func TestCheckAndInstall_RootRpmInstall(t *testing.T) {
 	}}
 	updater := testUpdater(t, client, runner, "1.0.1")
 	updater.GOARCH = "arm64"
+	updater.ExecutablePath = packageExecutablePath
 	updater.OSReleasePath = writeFile(t, updater.TempDir, "os-release", "ID=fedora\n")
 	updater.EUID = 0
 
@@ -277,11 +282,11 @@ func TestCheckAndInstall_RootRpmInstall(t *testing.T) {
 	}
 }
 
-func TestCheckAndInstall_TarFallbackReplacesExecutable(t *testing.T) {
+func TestCheckAndInstall_NonPackageInstallReplacesInvokedExecutable(t *testing.T) {
 	archive := makeArchive(t, "updated binary")
 	client := &fakeHTTPClient{responses: map[string]fakeHTTPResponse{
 		"https://api.github.com/repos/L1ghtn1ng/astral-tools-update/releases/latest": {
-			body: `{"tag_name":"v1.0.2","assets":[{"name":"astral-update_1.0.2_linux_amd64.tar.gz","browser_download_url":"https://example.test/astral.tar.gz"}]}`,
+			body: `{"tag_name":"v1.0.2","assets":[{"name":"astral-update_1.0.2_linux_amd64.deb","browser_download_url":"https://example.test/astral.deb"},{"name":"astral-update_1.0.2_linux_amd64.tar.gz","browser_download_url":"https://example.test/astral.tar.gz"}]}`,
 		},
 		"https://example.test/astral.tar.gz": {bytes: archive},
 	}}
@@ -291,7 +296,7 @@ func TestCheckAndInstall_TarFallbackReplacesExecutable(t *testing.T) {
 		t.Fatalf("write executable: %v", err)
 	}
 	updater.ExecutablePath = executablePath
-	updater.OSReleasePath = writeFile(t, updater.TempDir, "os-release", "ID=arch\n")
+	updater.OSReleasePath = writeFile(t, updater.TempDir, "os-release", "ID=debian\n")
 
 	result, err := updater.CheckAndInstall(context.Background())
 	if err != nil {
@@ -299,6 +304,9 @@ func TestCheckAndInstall_TarFallbackReplacesExecutable(t *testing.T) {
 	}
 	if !result.Installed {
 		t.Fatalf("expected installed result")
+	}
+	if result.AssetName != "astral-update_1.0.2_linux_amd64.tar.gz" {
+		t.Fatalf("expected tarball for non-package executable, got %q", result.AssetName)
 	}
 	got, err := os.ReadFile(executablePath)
 	if err != nil {
