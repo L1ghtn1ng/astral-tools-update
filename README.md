@@ -4,12 +4,13 @@
 `astral-tools-update` is a small Go CLI for keeping Astral tools up to date through `uv`.
 It will:
 
+- check GitHub for a newer `astral-update` release and install the matching Linux package,
 - make sure `uv` is available,
 - optionally run `uv self update`,
 - upgrade tools that are already installed, and
 - install missing tools at their latest version.
 
-By default, it updates `ruff` and `ty` when you run it without arguments.
+By default, it updates `ruff`, `ty`, and `zizmor` when you run it without arguments.
 
 ## What this repo does
 
@@ -18,7 +19,9 @@ This repository contains a command-line utility at `cmd/astral-update` and the c
 Current behavior:
 
 - accepts a list of Astral-managed tools such as `ruff` and `ty`,
-- defaults to `ruff ty` when no tool names are provided,
+- defaults to `ruff ty zizmor` when no tool names are provided,
+- checks GitHub for a newer stable `astral-update` release before updating tools,
+- selects release assets for the detected Linux package family and CPU architecture,
 - looks for `uv` on `PATH` first,
 - checks `uv`'s configured tool bin directory when checking for installed tools,
 - falls back to `~/.local/bin/<tool>` if that lookup is unavailable,
@@ -35,13 +38,13 @@ Current behavior:
 Run the binary with an optional list of tool names:
 
 ```bash
-astral-update [--no-self-update] [--version] [tools...]
+astral-update [--no-github-self-update] [--no-self-update] [--version] [tools...]
 ```
 
 Examples:
 
 ```bash
-# Default behavior: updates ruff and ty
+# Default behavior: updates ruff, ty, and zizmor
 astral-update
 
 # Update a specific set of tools
@@ -50,18 +53,25 @@ astral-update ruff ty
 # Skip updating uv itself
 astral-update --no-self-update ruff
 
+# Skip checking GitHub for a newer astral-update release
+astral-update --no-github-self-update ruff
+
 # Print the program version
 astral-update --version
 ```
 
 What happens during a run:
 
-1. The program validates the tool names.
-2. It locates `uv` or installs it with Astral's install script.
-3. Unless `--no-self-update` is set, it runs `uv self update`.
-4. For each requested tool:
+1. Unless `--no-github-self-update` is set, the program checks GitHub for a newer stable `astral-update` release.
+2. If a newer release exists, it selects the release asset matching the detected Linux CPU architecture and package format, then installs it.
+3. The program validates the tool names.
+4. It locates `uv` or installs it with Astral's install script.
+5. Unless `--no-self-update` is set, it runs `uv self update`.
+6. For each requested tool:
    - if the tool already exists, it runs `uv tool upgrade <tool>`
    - if the tool is missing, it runs `uv tool install <tool>@latest`
+
+GitHub check or download failures before installation starts are logged as warnings and do not stop the tool update workflow. If installation starts and fails, the command exits with an error.
 
 ## Building manually
 
@@ -71,7 +81,7 @@ Build the local binary into `bin/astral-update`:
 
 ```bash
 mkdir -p bin
-go build -ldflags "-s -w" -o bin/astral-update ./cmd/astral-update
+go build -buildmode=pie -trimpath -ldflags "-s -w" -o bin/astral-update ./cmd/astral-update
 ```
 
 ### With `make`
@@ -118,6 +128,8 @@ The release pipeline currently targets:
 - Linux `arm64`
 - archive output as `.tar.gz`
 - package output as `.deb` and `.rpm`
+
+During self-update on Linux, `.deb` is preferred for Debian/Ubuntu-like systems and `.rpm` is preferred for Fedora/RHEL/SUSE-like systems. If no native package format can be detected or matched, the updater falls back to the matching `.tar.gz` archive and replaces the current executable.
 
 ## Helpful notes
 
