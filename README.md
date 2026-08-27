@@ -30,7 +30,7 @@ Current behavior:
 
 ## Requirements
 
-- Go `1.26` to build from source
+- Go `1.27.x` to build from source
 - `curl` and `sh` if you want the program to attempt automatic `uv` installation
 
 ## Usage
