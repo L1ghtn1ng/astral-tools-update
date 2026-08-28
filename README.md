@@ -84,6 +84,10 @@ mkdir -p bin
 go build -buildmode=pie -trimpath -ldflags "-s -w" -o bin/astral-update ./cmd/astral-update
 ```
 
+Local builds report version `dev` and do not self-update. GoReleaser injects the
+Git tag into release binaries so the installed version and update comparison
+always use the same release identifier.
+
 ### With `make`
 
 The repository includes a `Makefile` with common development tasks:

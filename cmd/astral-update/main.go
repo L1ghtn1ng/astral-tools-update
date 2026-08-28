@@ -11,7 +11,12 @@ import (
 	"astral-tools-update/internal/updater"
 )
 
-const version = "1.1.0"
+const developmentVersion = "dev"
+
+// version is set from the release tag by GoReleaser. Development builds keep
+// the sentinel value so they cannot mistake a published release for an update
+// to themselves.
+var version = developmentVersion
 
 func main() {
 	logger := log.New(os.Stderr, "", 0)
@@ -36,7 +41,7 @@ func main() {
 		return
 	}
 
-	if !noGithubSelfUpdate {
+	if shouldCheckForSelfUpdate(noGithubSelfUpdate, version) {
 		selfUpdater := selfupdate.New(version, logger)
 		result, err := selfUpdater.CheckAndInstall(context.Background())
 		if err != nil {
@@ -58,4 +63,8 @@ func main() {
 		logger.Printf("ERROR: %v", err)
 		os.Exit(1)
 	}
+}
+
+func shouldCheckForSelfUpdate(disabled bool, currentVersion string) bool {
+	return !disabled && currentVersion != developmentVersion
 }
