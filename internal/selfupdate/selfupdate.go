@@ -233,7 +233,7 @@ func (updater *Updater) fetchLatestRelease(ctx context.Context) (githubRelease, 
 	if err != nil {
 		return githubRelease{}, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		limited, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
 		return githubRelease{}, fmt.Errorf("github latest release request failed: %s: %s", resp.Status, strings.TrimSpace(string(limited)))
@@ -315,7 +315,7 @@ func (updater *Updater) downloadAsset(ctx context.Context, asset githubAsset) (s
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("download %q failed: %s", asset.Name, resp.Status)
 	}
@@ -366,13 +366,13 @@ func (updater *Updater) replaceFromArchive(path string) error {
 	if err != nil {
 		return err
 	}
-	defer archive.Close()
+	defer func() { _ = archive.Close() }()
 
 	gzipReader, err := gzip.NewReader(archive)
 	if err != nil {
 		return err
 	}
-	defer gzipReader.Close()
+	defer func() { _ = gzipReader.Close() }()
 
 	tarReader := tar.NewReader(gzipReader)
 	dir := filepath.Dir(updater.ExecutablePath)
